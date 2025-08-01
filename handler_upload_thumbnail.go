@@ -54,9 +54,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusInternalServerError, "Error reading file data", err)
 		return
 	}
-	base64StrImageData := base64.StdEncoding.EncodeToString(data)
-	dataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, base64StrImageData)
-
 	//
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
@@ -68,18 +65,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	//
-	// newVideoThumbnail := thumbnail{
-	// 	data:      data,
-	// 	mediaType: mediaType,
-	// }
-	// videoThumbnails[videoID] = newVideoThumbnail
-	//
-	// url := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s ", cfg.port, videoID)
-	video.ThumbnailURL = &dataURL
+	base64Encoded := base64.StdEncoding.EncodeToString(data)
+	base64DataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, base64Encoded)
+	video.ThumbnailURL = &base64DataURL
 	//
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
-		// delete(videoThumbnails, videoID)
 		respondWithError(w, http.StatusInternalServerError, "Could not update video", err)
 		return
 	}
