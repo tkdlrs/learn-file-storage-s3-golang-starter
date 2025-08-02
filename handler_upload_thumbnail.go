@@ -1,10 +1,12 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -36,24 +38,26 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	const maxMemory = 10 << 20
 	r.ParseMultipartForm(maxMemory)
 	//
-	file, header, err := r.FormFile("thumbnail")
+	newFile, header, err := r.FormFile("thumbnail")
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
 		return
 	}
-	defer file.Close()
+	defer newFile.Close()
 	//
 	mediaType := header.Header.Get("Content-Type")
 	if mediaType == "" {
 		respondWithError(w, http.StatusBadRequest, "Missing Content-Type for thumbnail", nil)
 		return
 	}
+	fileExtension := strings.Split(mediaType, "/")[1]
 	//
-	data, err := io.ReadAll(file)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error reading file data", err)
-		return
-	}
+	// data, err := io.ReadAll(newFile)
+	// if err != nil {
+	// 	respondWithError(w, http.StatusInternalServerError, "Error reading file data", err)
+	// 	return
+	// }
+
 	//
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
@@ -65,9 +69,24 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	//
-	base64Encoded := base64.StdEncoding.EncodeToString(data)
-	base64DataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, base64Encoded)
-	video.ThumbnailURL = &base64DataURL
+	fileName := videoIDString + "." + fileExtension
+	thumbnailFilePath := filepath.Join(cfg.assetsRoot, fileName)
+	thumbnailURL := fmt.Sprintf("http://localhost:%s/%s", cfg.port, thumbnailFilePath)
+	//
+	fileInFileSystem, err := os.Create(thumbnailFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not create thumbnail", err)
+		return
+	}
+	defer fileInFileSystem.Close()
+	//
+	if _, err := io.Copy(fileInFileSystem, newFile); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Ya dun fucked up.", err)
+		return
+	}
+
+	//
+	video.ThumbnailURL = &thumbnailURL
 	//
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
