@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -53,8 +55,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusBadRequest, "Incorrect Content-Type provided for thumbnail", nil)
 		return
 	}
+	// Make a random key for the thumbnail filename
+	key := make([]byte, 32)
+	rand.Read(key)
+	base64EncodedString := base64.RawURLEncoding.EncodeToString(key)
 	//
-	assetPath := getAssetPath(videoID, mediaType)
+	assetPath := getAssetPath(base64EncodedString, mediaType)
 	assetDiskPath := cfg.getAssetDiskPath(assetPath)
 	//
 	dst, err := os.Create(assetDiskPath)
