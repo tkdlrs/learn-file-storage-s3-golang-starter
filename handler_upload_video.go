@@ -87,6 +87,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Unable to rewind video", err)
 		return
 	}
+
 	// Figure out if the video is horiztonal or vertical for filepath prefixing
 	directory := ""
 	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
@@ -106,11 +107,25 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	//
 	key := getAssetPath(mediaType)
 	key = path.Join(directory, key)
+	//
+	processedFilePath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error processing video for fast start", err)
+		return
+	}
+	defer os.Remove(processedFilePath)
+	//
+	processedFile, err := os.Open(processedFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not open processed file", err)
+		return
+	}
+	defer processedFile.Close()
 	// Prepare PutObjectInput
 	putObjectInput := &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(key),
-		Body:        tempFile,
+		Body:        processedFile,
 		ContentType: aws.String(mediaType),
 	}
 	// Perform the PutObject operation
@@ -172,4 +187,37 @@ func getVideoAspectRatio(filePath string) (string, error) {
 		return "9:16", nil
 	}
 	return "other", nil
+}
+
+func processVideoForFastStart(inputFilePath string) (string, error) {
+	processedFilePath := fmt.Sprintf("%s.processing", inputFilePath)
+	//
+	cmd := exec.Command("ffmpeg",
+		"-i",
+		inputFilePath,
+		"-movflags",
+		"faststart",
+		"-c",
+		"copy",
+		"-f",
+		"mp4",
+		processedFilePath,
+	)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	//
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("error processing video: %s, %v", stderr.String(), err)
+	}
+	fileInfo, err := os.Stat(processedFilePath)
+	if err != nil {
+		return "", fmt.Errorf("could not stat processed file: %v", err)
+	}
+	if fileInfo.Size() == 0 {
+		return "", fmt.Errorf("processed file is empty")
+	}
+	//
+	return processedFilePath, nil
+
 }
