@@ -7,9 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 )
 
 func (cfg apiConfig) ensureAssetsDir() error {
@@ -49,15 +46,4 @@ func mediaTypeToExt(mediaType string) string {
 		return ".bin"
 	}
 	return "." + parts[1]
-}
-
-func (cfg apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
-	splitVideoURL := strings.Split(*video.VideoURL, ",")
-	updatedVideoURL, err := generatePresignedURL(cfg.s3Client, splitVideoURL[0], splitVideoURL[1], time.Minute*15)
-	if err != nil {
-		return database.Video{}, fmt.Errorf("error with dbVideoToSignedVideo method: %v", err)
-	}
-	// updatedVideo :=
-	video.VideoURL = &updatedVideoURL
-	return video, nil
 }
